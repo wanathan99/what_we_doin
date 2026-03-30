@@ -149,6 +149,14 @@
       font-style: italic;
     }
 
+    .popup-now-playing {
+      font-size: 0.82rem;
+      color: #7dd3fc;
+      margin-bottom: 0.4rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #333;
+    }
+
     .popup-not-visited {
       font-size: 0.85rem;
       color: #888;
@@ -260,28 +268,39 @@
     });
   }
 
-  // ── Load sheet data via JSONP ─────────────────────────────────────────────
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlmDSEUB_eVauMmSPV6eMxhCKGu05Ih-3kiYfZzZkEqn62R546dV49rsex4KxGRuhr/exec';
+  // ── Load data via JSONP ───────────────────────────────────────────────────
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbywjL7fbAoOsywbjqzElfxWOM74pIYa2PQ3faVEXL1FvfHuzkb3b2HsATx8Y4FkDZS-MQ/exec';
 
-  window.handleTheaterData = function(data) {
+  let sheetData    = null;
+  let currentShows = null;
+
+  function tryRender() {
+    if (!sheetData || !currentShows) return;
+
     let visitedCount = 0;
-    const total = data.length;
+    const total = sheetData.length;
 
-    data.forEach(row => {
+    sheetData.forEach(row => {
       const name    = String(row['Theater'] || '').trim();
       const visited = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
       const show    = String(row['Show'] || '').trim();
       const extra   = String(row['Additional'] || '').trim();
       const coords  = COORDS[name];
+      const nowPlaying = currentShows[name] || null;
 
       if (visited) visitedCount++;
-      if (!coords) return; // skip if no coordinates found
+      if (!coords) return;
 
       const marker = L.marker(coords, { icon: makeIcon(visited) }).addTo(map);
 
       let popupHtml = `<div class="popup-name">${name}</div>`;
+
+      if (nowPlaying) {
+        popupHtml += `<div class="popup-now-playing">🎬 Now Playing: <strong>${nowPlaying}</strong></div>`;
+      }
+
       if (visited) {
-        if (show) popupHtml += `<div class="popup-show">🎭 ${show}</div>`;
+        if (show) popupHtml += `<div class="popup-show">🎭 You saw: ${show}</div>`;
         if (extra) popupHtml += `<div class="popup-additional">Also: ${extra}</div>`;
         if (!show) popupHtml += `<div class="popup-show" style="color:#f5c518">✓ Visited</div>`;
       } else {
@@ -299,12 +318,31 @@
     document.getElementById('progress-label').textContent = pct + '% complete';
   };
 
-  const script = document.createElement('script');
-  script.onerror = () => {
-    document.getElementById('progress-label').textContent = 'Failed to load data';
+  window.handleTheaterData = function(data) {
+    sheetData = data;
+    tryRender();
   };
-  script.src = APPS_SCRIPT_URL + '?callback=handleTheaterData';
-  document.head.appendChild(script);
+
+  window.handleCurrentShows = function(data) {
+    currentShows = data;
+    tryRender();
+  };
+
+  function loadJSONP(src, onerrorCallback) {
+    const s = document.createElement('script');
+    s.onerror = onerrorCallback;
+    s.src = src;
+    document.head.appendChild(s);
+  }
+
+  loadJSONP(
+    APPS_SCRIPT_URL + '?action=sheet&callback=handleTheaterData',
+    () => { sheetData = []; tryRender(); }
+  );
+  loadJSONP(
+    APPS_SCRIPT_URL + '?action=current&callback=handleCurrentShows',
+    () => { currentShows = {}; tryRender(); }
+  );
 </script>
 
 </body>
