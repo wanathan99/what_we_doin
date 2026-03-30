@@ -290,6 +290,7 @@
       const normalize = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
       const normName  = normalize(name);
       const matchKey  = Object.keys(currentShows).find(k => {
+        if (!k) return false;           // skip empty-string keys
         const nk = normalize(k);
         return nk === normName || nk.includes(normName) || normName.includes(nk);
       });
