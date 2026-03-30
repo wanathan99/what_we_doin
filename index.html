@@ -286,7 +286,15 @@
       const show    = String(row['Show'] || '').trim();
       const extra   = String(row['Additional'] || '').trim();
       const coords  = COORDS[name];
-      const nowPlaying = currentShows[name] || null;
+      // Fuzzy match theater name against currentShows keys
+      const normalize = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normName  = normalize(name);
+      const matchKey  = Object.keys(currentShows).find(k => {
+        const nk = normalize(k);
+        return nk === normName || nk.includes(normName) || normName.includes(nk);
+      });
+      const rawPlaying = matchKey ? currentShows[matchKey] : null;
+      const nowPlaying = rawPlaying && /empty/i.test(rawPlaying) ? 'Currently Empty' : rawPlaying;
 
       if (visited) visitedCount++;
       if (!coords) return;
