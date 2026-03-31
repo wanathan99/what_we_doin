@@ -268,7 +268,7 @@
       <div class="toggle-btns">
         <button class="toggle-btn active" id="btn-theaters" onclick="switchLayer('theaters')">🎭 Broadway</button>
         <button class="toggle-btn" id="btn-restaurants" onclick="switchLayer('restaurants')">🍽️ Restaurants</button>
-        <button class="toggle-btn" id="btn-other" onclick="switchLayer('other')">🎟️ Other</button>
+        <button class="toggle-btn" id="btn-other" onclick="switchLayer('other')">🥀 Other</button>
       </div>
     </div>
   </div>
@@ -595,6 +595,7 @@
 
     let visitedCount = 0;
     const total = otherData.length;
+    const usedCoords = {}; // track duplicate coordinates
 
     otherData.forEach(row => {
       const name      = String(row['Experience'] || '').trim();
@@ -602,11 +603,22 @@
       const visited   = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
       const notes     = String(row['Notes']      || '').trim();
       const visitDate = row['Visit Date'];
-      const lat       = parseFloat(row['lat']);
-      const lng       = parseFloat(row['lng']);
+      let lat         = parseFloat(row['lat']);
+      let lng         = parseFloat(row['lng']);
 
       if (!name || isNaN(lat) || isNaN(lng)) return;
       if (visited) visitedCount++;
+
+      // Spread duplicate coordinates in a small circle
+      const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+      const count = usedCoords[key] || 0;
+      usedCoords[key] = count + 1;
+      if (count > 0) {
+        const angle  = (count * 137.5) * (Math.PI / 180); // golden angle keeps pins evenly spread
+        const radius = 0.0003;
+        lat += radius * Math.cos(angle);
+        lng += radius * Math.sin(angle);
+      }
 
       const marker = L.marker([lat, lng], { icon: makeOtherIcon(visited) });
 
