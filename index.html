@@ -91,6 +91,42 @@
       color: #ccc;
     }
 
+    /* Category dropdown */
+    .category-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .category-wrap label {
+      font-size: 0.75rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    #category-select {
+      background: #1e1e3a;
+      border: 1.5px solid #444;
+      border-radius: 999px;
+      color: #ccc;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.9rem;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 1.8rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.7rem center;
+    }
+
+    #category-select:hover, #category-select:focus { border-color: #888; }
+    #category-select.active-filter { border-color: #f5c518; color: #f5c518; }
+
     .counter {
       display: flex;
       align-items: center;
@@ -273,6 +309,13 @@
     </div>
   </div>
 
+  <div class="category-wrap" id="category-wrap" style="display:none;">
+    <label>Category</label>
+    <select id="category-select" onchange="filterByCategory(this.value)">
+      <option value="">All</option>
+    </select>
+  </div>
+
   <div class="counter">
     <div class="counter-box">
       <div class="counter-num" id="visited-count">—</div>
@@ -363,12 +406,13 @@
     other:       { visited: 0, total: 0 }
   };
 
-  let activeLayer  = 'theaters';
-  let activeFilter = null; // 'visited', 'not-visited', or null (show all)
+  let activeLayer    = 'theaters';
+  let activeFilter   = null; // 'visited', 'not-visited', or null
+  let activeCategory = '';   // '' = all categories
 
-  // Store all markers with visited state for filtering
+  // Store all markers with metadata for filtering
   const allMarkers = {
-    theaters:    [], // { marker, visited }
+    theaters:    [], // { marker, visited, category }
     restaurants: [],
     other:       []
   };
@@ -435,10 +479,12 @@
 
   // ── Layer toggle ──────────────────────────────────────────────────────────
   function switchLayer(which) {
-    activeLayer  = which;
-    activeFilter = null;
+    activeLayer    = which;
+    activeFilter   = null;
+    activeCategory = '';
     document.getElementById('filter-visited').classList.remove('active-filter');
     document.getElementById('filter-not-visited').classList.remove('active-filter');
+    populateCategoryDropdown(which);
 
     // Hide all layers, then show the selected one
     map.removeLayer(theaterLayer);
@@ -473,13 +519,38 @@
     const markers  = allMarkers[activeLayer];
 
     layer.clearLayers();
-    markers.forEach(({ marker, visited }) => {
-      if (activeFilter === null ||
-         (activeFilter === 'visited'     &&  visited) ||
-         (activeFilter === 'not-visited' && !visited)) {
-        layer.addLayer(marker);
-      }
+    markers.forEach(({ marker, visited, category }) => {
+      const visitOk = activeFilter === null ||
+        (activeFilter === 'visited'     &&  visited) ||
+        (activeFilter === 'not-visited' && !visited);
+      const catOk = !activeCategory || category === activeCategory;
+      if (visitOk && catOk) layer.addLayer(marker);
     });
+  }
+
+  function filterByCategory(val) {
+    activeCategory = val;
+    const sel = document.getElementById('category-select');
+    sel.classList.toggle('active-filter', val !== '');
+    applyFilter();
+  }
+
+  function populateCategoryDropdown(layer) {
+    const hasCategories = layer !== 'theaters';
+    document.getElementById('category-wrap').style.display = hasCategories ? 'flex' : 'none';
+    if (!hasCategories) return;
+
+    const categories = [...new Set(allMarkers[layer].map(m => m.category).filter(Boolean))].sort();
+    const sel = document.getElementById('category-select');
+    sel.innerHTML = '<option value="">All</option>';
+    categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      sel.appendChild(opt);
+    });
+    sel.value = '';
+    sel.classList.remove('active-filter');
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
@@ -581,12 +652,11 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.restaurants.push({ marker, visited });
+      allMarkers.restaurants.push({ marker, visited, category });
     });
 
     stats.restaurants = { visited: visitedCount, total };
-    if (activeLayer === 'restaurants') applyFilter();
-    if (activeLayer === 'restaurants') updateCounter('restaurants');
+    if (activeLayer === 'restaurants') { populateCategoryDropdown('restaurants'); applyFilter(); updateCounter('restaurants'); }
   }
 
   // ── Render other ─────────────────────────────────────────────────────────
@@ -641,11 +711,11 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.other.push({ marker, visited });
+      allMarkers.other.push({ marker, visited, category });
     });
 
     stats.other = { visited: visitedCount, total };
-    if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
+    if (activeLayer === 'other') { populateCategoryDropdown('other'); applyFilter(); updateCounter('other'); }
   }
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
