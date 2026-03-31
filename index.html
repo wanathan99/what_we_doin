@@ -290,6 +290,7 @@
   </div>
 
   <div class="legend">
+    <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:0.1rem;">click to filter</div>
     <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
     <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
   </div>
@@ -473,7 +474,7 @@
 
     let visitedCount = 0;
     const total = sheetData.length;
-    const normalize = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalize = s => s.toLowerCase().replace(/theatre/g, 'theater').replace(/[^a-z0-9]/g, '');
 
     sheetData.forEach(row => {
       const name    = String(row['Theater'] || '').trim();
