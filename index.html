@@ -151,6 +151,23 @@
       gap: 0.4rem;
       font-size: 0.82rem;
       color: #ccc;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 999px;
+      border: 1.5px solid transparent;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .legend-item:hover {
+      border-color: #555;
+      color: #fff;
+    }
+
+    .legend-item.active-filter {
+      border-color: #f5c518;
+      color: #fff;
+      background: rgba(245, 197, 24, 0.1);
     }
 
     .legend-dot {
@@ -273,8 +290,8 @@
   </div>
 
   <div class="legend">
-    <div class="legend-item"><span class="legend-dot visited"></span> Visited</div>
-    <div class="legend-item"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
+    <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
+    <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
   </div>
 </header>
 
@@ -342,7 +359,14 @@
     restaurants: { visited: 0, total: 0 }
   };
 
-  let activeLayer = 'theaters';
+  let activeLayer  = 'theaters';
+  let activeFilter = null; // 'visited', 'not-visited', or null (show all)
+
+  // Store all markers with visited state for filtering
+  const allMarkers = {
+    theaters:    [], // { marker, visited }
+    restaurants: []
+  };
 
   // ── Icons ─────────────────────────────────────────────────────────────────
   function makeTheaterIcon(visited) {
@@ -392,7 +416,11 @@
 
   // ── Layer toggle ──────────────────────────────────────────────────────────
   function switchLayer(which) {
-    activeLayer = which;
+    activeLayer  = which;
+    activeFilter = null;
+    document.getElementById('filter-visited').classList.remove('active-filter');
+    document.getElementById('filter-not-visited').classList.remove('active-filter');
+
     if (which === 'theaters') {
       map.addLayer(theaterLayer);
       map.removeLayer(restaurantLayer);
@@ -404,7 +432,32 @@
       document.getElementById('btn-restaurants').classList.add('active');
       document.getElementById('btn-theaters').classList.remove('active');
     }
+    applyFilter();
     updateCounter(which);
+  }
+
+  // ── Filter ────────────────────────────────────────────────────────────────
+  function toggleFilter(which) {
+    activeFilter = activeFilter === which ? null : which;
+
+    document.getElementById('filter-visited').classList.toggle('active-filter', activeFilter === 'visited');
+    document.getElementById('filter-not-visited').classList.toggle('active-filter', activeFilter === 'not-visited');
+
+    applyFilter();
+  }
+
+  function applyFilter() {
+    const layer   = activeLayer === 'theaters' ? theaterLayer : restaurantLayer;
+    const markers = allMarkers[activeLayer];
+
+    layer.clearLayers();
+    markers.forEach(({ marker, visited }) => {
+      if (activeFilter === null ||
+         (activeFilter === 'visited'     &&  visited) ||
+         (activeFilter === 'not-visited' && !visited)) {
+        layer.addLayer(marker);
+      }
+    });
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
@@ -457,10 +510,11 @@
       }
 
       marker.bindPopup(popupHtml);
-      theaterLayer.addLayer(marker);
+      allMarkers.theaters.push({ marker, visited });
     });
 
     stats.theaters = { visited: visitedCount, total };
+    applyFilter();
     if (activeLayer === 'theaters') updateCounter('theaters');
   }
 
@@ -504,10 +558,11 @@
       }
 
       marker.bindPopup(popupHtml);
-      restaurantLayer.addLayer(marker);
+      allMarkers.restaurants.push({ marker, visited });
     });
 
     stats.restaurants = { visited: visitedCount, total };
+    if (activeLayer === 'restaurants') applyFilter();
     if (activeLayer === 'restaurants') updateCounter('restaurants');
   }
 
