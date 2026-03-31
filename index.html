@@ -268,6 +268,7 @@
       <div class="toggle-btns">
         <button class="toggle-btn active" id="btn-theaters" onclick="switchLayer('theaters')">🎭 Broadway</button>
         <button class="toggle-btn" id="btn-restaurants" onclick="switchLayer('restaurants')">🍽️ Restaurants</button>
+        <button class="toggle-btn" id="btn-other" onclick="switchLayer('other')">🎟️ Other</button>
       </div>
     </div>
   </div>
@@ -354,10 +355,12 @@
   // ── Layer groups ──────────────────────────────────────────────────────────
   const theaterLayer    = L.layerGroup().addTo(map);
   const restaurantLayer = L.layerGroup();
+  const otherLayer      = L.layerGroup();
 
   const stats = {
     theaters:    { visited: 0, total: 0 },
-    restaurants: { visited: 0, total: 0 }
+    restaurants: { visited: 0, total: 0 },
+    other:       { visited: 0, total: 0 }
   };
 
   let activeLayer  = 'theaters';
@@ -366,7 +369,8 @@
   // Store all markers with visited state for filtering
   const allMarkers = {
     theaters:    [], // { marker, visited }
-    restaurants: []
+    restaurants: [],
+    other:       []
   };
 
   // ── Icons ─────────────────────────────────────────────────────────────────
@@ -389,6 +393,20 @@
       className: '',
       html: `<div style="
         width:14px;height:14px;border-radius:3px;
+        background:${visited ? '#f5c518' : '#555'};
+        border:2.5px solid ${visited ? '#c9a000' : '#888'};
+        box-shadow:0 0 ${visited ? '8px rgba(245,197,24,0.6)' : '4px rgba(0,0,0,0.4)'};
+        cursor:pointer;
+      "></div>`,
+      iconSize: [14,14], iconAnchor: [7,7], popupAnchor: [0,-10]
+    });
+  }
+
+  function makeOtherIcon(visited) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:12px;height:12px;transform:rotate(45deg);
         background:${visited ? '#f5c518' : '#555'};
         border:2.5px solid ${visited ? '#c9a000' : '#888'};
         box-shadow:0 0 ${visited ? '8px rgba(245,197,24,0.6)' : '4px rgba(0,0,0,0.4)'};
@@ -422,17 +440,19 @@
     document.getElementById('filter-visited').classList.remove('active-filter');
     document.getElementById('filter-not-visited').classList.remove('active-filter');
 
-    if (which === 'theaters') {
-      map.addLayer(theaterLayer);
-      map.removeLayer(restaurantLayer);
-      document.getElementById('btn-theaters').classList.add('active');
-      document.getElementById('btn-restaurants').classList.remove('active');
-    } else {
-      map.removeLayer(theaterLayer);
-      map.addLayer(restaurantLayer);
-      document.getElementById('btn-restaurants').classList.add('active');
-      document.getElementById('btn-theaters').classList.remove('active');
-    }
+    // Hide all layers, then show the selected one
+    map.removeLayer(theaterLayer);
+    map.removeLayer(restaurantLayer);
+    map.removeLayer(otherLayer);
+    if (which === 'theaters')    map.addLayer(theaterLayer);
+    if (which === 'restaurants') map.addLayer(restaurantLayer);
+    if (which === 'other')       map.addLayer(otherLayer);
+
+    // Update toggle buttons
+    ['theaters', 'restaurants', 'other'].forEach(l => {
+      document.getElementById('btn-' + l).classList.toggle('active', l === which);
+    });
+
     applyFilter();
     updateCounter(which);
   }
@@ -448,8 +468,9 @@
   }
 
   function applyFilter() {
-    const layer   = activeLayer === 'theaters' ? theaterLayer : restaurantLayer;
-    const markers = allMarkers[activeLayer];
+    const layerMap = { theaters: theaterLayer, restaurants: restaurantLayer, other: otherLayer };
+    const layer    = layerMap[activeLayer];
+    const markers  = allMarkers[activeLayer];
 
     layer.clearLayers();
     markers.forEach(({ marker, visited }) => {
@@ -462,11 +483,12 @@
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQmXFy1U3BBEYu2w2hiFMfgV3y_23eRXFhlhSxjudlpPK5IbHUdEeh9uFRf82l5lgXVw/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyT2NBnuQnWs2i1SiUwki10JzrY29315rVJSduFVswaQ-Zer9qVRtO3ND0NDLVNVz2tAg/exec';
 
   let sheetData      = null;
   let currentShows   = null;
   let restaurantData = null;
+  let otherData      = null;
 
   // ── Render theaters ───────────────────────────────────────────────────────
   function tryRenderTheaters() {
@@ -567,6 +589,53 @@
     if (activeLayer === 'restaurants') updateCounter('restaurants');
   }
 
+  // ── Render other ─────────────────────────────────────────────────────────
+  function renderOther() {
+    if (!otherData) return;
+
+    let visitedCount = 0;
+    const total = otherData.length;
+
+    otherData.forEach(row => {
+      const name      = String(row['Experience'] || '').trim();
+      const category  = String(row['Category']   || '').trim();
+      const visited   = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
+      const notes     = String(row['Notes']      || '').trim();
+      const visitDate = row['Visit Date'];
+      const lat       = parseFloat(row['lat']);
+      const lng       = parseFloat(row['lng']);
+
+      if (!name || isNaN(lat) || isNaN(lng)) return;
+      if (visited) visitedCount++;
+
+      const marker = L.marker([lat, lng], { icon: makeOtherIcon(visited) });
+
+      let popupHtml = `<div class="popup-name">${name}</div>`;
+      if (category) popupHtml += `<div class="popup-category">${category}</div>`;
+
+      if (visited) {
+        if (visitDate && visitDate !== 0) {
+          const d = new Date(visitDate);
+          const fmt = !isNaN(d)
+            ? d.toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'2-digit', timeZone:'UTC' })
+            : '';
+          if (fmt) popupHtml += `<div class="popup-date">🗓 ${fmt}</div>`;
+        }
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+        if (!notes) popupHtml += `<div class="popup-show" style="color:#f5c518">✓ Visited</div>`;
+      } else {
+        popupHtml += `<div class="popup-not-visited">Not yet visited</div>`;
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+      }
+
+      marker.bindPopup(popupHtml);
+      allMarkers.other.push({ marker, visited });
+    });
+
+    stats.other = { visited: visitedCount, total };
+    if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
+  }
+
   // ── Callbacks ─────────────────────────────────────────────────────────────
   window.handleTheaterData = function(data) {
     sheetData = data;
@@ -581,6 +650,11 @@
   window.handleRestaurantData = function(data) {
     restaurantData = data;
     renderRestaurants();
+  };
+
+  window.handleOtherData = function(data) {
+    otherData = data;
+    renderOther();
   };
 
   function loadJSONP(src, onerrorCallback) {
@@ -601,6 +675,10 @@
   loadJSONP(
     APPS_SCRIPT_URL + '?action=restaurants&callback=handleRestaurantData',
     () => { restaurantData = []; renderRestaurants(); }
+  );
+  loadJSONP(
+    APPS_SCRIPT_URL + '?action=other&callback=handleOtherData',
+    () => { otherData = []; renderOther(); }
   );
 </script>
 
