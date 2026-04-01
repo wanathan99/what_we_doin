@@ -12,17 +12,15 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #1a1a2e;
       color: white;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
     }
 
     header {
       padding: 1.25rem 2rem;
       background: #12122a;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: 1rem;
       box-shadow: 0 2px 10px rgba(0,0,0,0.4);
     }
@@ -93,42 +91,6 @@
       color: #ccc;
     }
 
-    /* Category dropdown */
-    .category-wrap {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .category-wrap label {
-      font-size: 0.75rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      white-space: nowrap;
-    }
-
-    #category-select {
-      background: #1e1e3a;
-      border: 1.5px solid #444;
-      border-radius: 999px;
-      color: #ccc;
-      font-size: 0.82rem;
-      padding: 0.3rem 0.9rem;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.2s;
-      appearance: none;
-      -webkit-appearance: none;
-      padding-right: 1.8rem;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 0.7rem center;
-    }
-
-    #category-select:hover, #category-select:focus { border-color: #888; }
-    #category-select.active-filter { border-color: #f5c518; color: #f5c518; }
-
     .counter {
       display: flex;
       align-items: center;
@@ -178,16 +140,9 @@
 
     .legend {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 0.4rem;
-      justify-self: end;
-    }
-
-    .legend-items {
-      display: flex;
       gap: 1.25rem;
       align-items: center;
+      flex-wrap: wrap;
     }
 
     .legend-item {
@@ -226,9 +181,8 @@
     .legend-dot.not-visited { background: #555;    border-color: #888; }
 
     #map {
-      flex: 1;
+      height: calc(100vh - 90px);
       width: 100%;
-      min-height: 0;
     }
 
     /* Leaflet popup styling */
@@ -337,17 +291,9 @@
   </div>
 
   <div class="legend">
-    <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;">click to filter</div>
-    <div class="legend-items">
-      <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
-      <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
-    </div>
-    <div class="category-wrap" id="category-wrap" style="display:none;">
-      <label>Category</label>
-      <select id="category-select" onchange="filterByCategory(this.value)">
-        <option value="">All</option>
-      </select>
-    </div>
+    <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:0.1rem;">click to filter</div>
+    <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
+    <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
   </div>
 </header>
 
@@ -417,13 +363,12 @@
     other:       { visited: 0, total: 0 }
   };
 
-  let activeLayer    = 'theaters';
-  let activeFilter   = null; // 'visited', 'not-visited', or null
-  let activeCategory = '';   // '' = all categories
+  let activeLayer  = 'theaters';
+  let activeFilter = null; // 'visited', 'not-visited', or null (show all)
 
-  // Store all markers with metadata for filtering
+  // Store all markers with visited state for filtering
   const allMarkers = {
-    theaters:    [], // { marker, visited, category }
+    theaters:    [], // { marker, visited }
     restaurants: [],
     other:       []
   };
@@ -490,12 +435,10 @@
 
   // ── Layer toggle ──────────────────────────────────────────────────────────
   function switchLayer(which) {
-    activeLayer    = which;
-    activeFilter   = null;
-    activeCategory = '';
+    activeLayer  = which;
+    activeFilter = null;
     document.getElementById('filter-visited').classList.remove('active-filter');
     document.getElementById('filter-not-visited').classList.remove('active-filter');
-    populateCategoryDropdown(which);
 
     // Hide all layers, then show the selected one
     map.removeLayer(theaterLayer);
@@ -510,19 +453,8 @@
       document.getElementById('btn-' + l).classList.toggle('active', l === which);
     });
 
-    map.invalidateSize();
     applyFilter();
     updateCounter(which);
-
-    // Zoom to fit markers for non-theater layers
-    if (which !== 'theaters') {
-      const lg = which === 'restaurants' ? restaurantLayer : otherLayer;
-      if (lg.getLayers().length > 0) {
-        try { map.fitBounds(lg.getBounds(), { padding: [50, 50], maxZoom: 14 }); } catch(e) {}
-      }
-    } else {
-      map.setView([40.762, -73.986], 15);
-    }
   }
 
   // ── Filter ────────────────────────────────────────────────────────────────
@@ -541,38 +473,13 @@
     const markers  = allMarkers[activeLayer];
 
     layer.clearLayers();
-    markers.forEach(({ marker, visited, category }) => {
-      const visitOk = activeFilter === null ||
-        (activeFilter === 'visited'     &&  visited) ||
-        (activeFilter === 'not-visited' && !visited);
-      const catOk = !activeCategory || category === activeCategory;
-      if (visitOk && catOk) layer.addLayer(marker);
+    markers.forEach(({ marker, visited }) => {
+      if (activeFilter === null ||
+         (activeFilter === 'visited'     &&  visited) ||
+         (activeFilter === 'not-visited' && !visited)) {
+        layer.addLayer(marker);
+      }
     });
-  }
-
-  function filterByCategory(val) {
-    activeCategory = val;
-    const sel = document.getElementById('category-select');
-    sel.classList.toggle('active-filter', val !== '');
-    applyFilter();
-  }
-
-  function populateCategoryDropdown(layer) {
-    const hasCategories = layer !== 'theaters';
-    document.getElementById('category-wrap').style.display = hasCategories ? 'flex' : 'none';
-    if (!hasCategories) return;
-
-    const categories = [...new Set(allMarkers[layer].map(m => m.category).filter(Boolean))].sort();
-    const sel = document.getElementById('category-select');
-    sel.innerHTML = '<option value="">All</option>';
-    categories.forEach(cat => {
-      const opt = document.createElement('option');
-      opt.value = cat;
-      opt.textContent = cat;
-      sel.appendChild(opt);
-    });
-    sel.value = '';
-    sel.classList.remove('active-filter');
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
@@ -674,18 +581,12 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.restaurants.push({ marker, visited, category });
+      allMarkers.restaurants.push({ marker, visited });
     });
 
     stats.restaurants = { visited: visitedCount, total };
-    if (activeLayer === 'restaurants') {
-      populateCategoryDropdown('restaurants');
-      applyFilter();
-      updateCounter('restaurants');
-      if (restaurantLayer.getLayers().length > 0) {
-        try { map.fitBounds(restaurantLayer.getBounds(), { padding: [50, 50], maxZoom: 14 }); } catch(e) {}
-      }
-    }
+    if (activeLayer === 'restaurants') applyFilter();
+    if (activeLayer === 'restaurants') updateCounter('restaurants');
   }
 
   // ── Render other ─────────────────────────────────────────────────────────
@@ -740,18 +641,11 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.other.push({ marker, visited, category });
+      allMarkers.other.push({ marker, visited });
     });
 
     stats.other = { visited: visitedCount, total };
-    if (activeLayer === 'other') {
-      populateCategoryDropdown('other');
-      applyFilter();
-      updateCounter('other');
-      if (otherLayer.getLayers().length > 0) {
-        try { map.fitBounds(otherLayer.getBounds(), { padding: [50, 50], maxZoom: 14 }); } catch(e) {}
-      }
-    }
+    if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
   }
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
