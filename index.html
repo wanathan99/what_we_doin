@@ -14,7 +14,6 @@
       color: white;
     }
 
-    
     header {
       padding: 1.25rem 2rem;
       background: #12122a;
@@ -542,30 +541,65 @@
     if (activeLayer === 'theaters') updateCounter('theaters');
   }
 
+  // ── Geocoding (Nominatim + localStorage cache) ───────────────────────────
+  const _geoCache = (() => {
+    try { return JSON.parse(localStorage.getItem('wwd_geocache') || '{}'); }
+    catch(e) { return {}; }
+  })();
+
+  async function geocodeAddress(address) {
+    if (_geoCache[address]) return _geoCache[address]; // [lat, lng]
+    await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 req/sec
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`,
+        { headers: { 'User-Agent': 'what-we-doin-map' } }
+      );
+      const hits = await res.json();
+      if (hits[0]) {
+        const pair = [parseFloat(hits[0].lat), parseFloat(hits[0].lon)];
+        _geoCache[address] = pair;
+        try { localStorage.setItem('wwd_geocache', JSON.stringify(_geoCache)); } catch(e) {}
+        return pair;
+      }
+    } catch(e) {}
+    return null;
+  }
+
   // ── Render restaurants ────────────────────────────────────────────────────
-  function renderRestaurants() {
+  async function renderRestaurants() {
     if (!restaurantData) return;
 
     let visitedCount = 0;
     const total = restaurantData.length;
+    stats.restaurants = { visited: 0, total };
+    if (activeLayer === 'restaurants') updateCounter('restaurants');
 
-    restaurantData.forEach(row => {
+    for (const row of restaurantData) {
       const name      = String(row['Restaurant'] || '').trim();
       const category  = String(row['Category']   || '').trim();
       const visited   = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
       const notes     = String(row['Notes']      || '').trim();
       const visitDate = row['Visit Date'];
-      const lat       = parseFloat(row['lat']);
-      const lng       = parseFloat(row['lng']);
+      const address   = String(row['Address']    || '').trim();
 
-      if (!name || isNaN(lat) || isNaN(lng)) return;
+      let lat = parseFloat(row['lat']);
+      let lng = parseFloat(row['lng']);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        if (!address) continue;
+        const coords = await geocodeAddress(address);
+        if (!coords) continue;
+        [lat, lng] = coords;
+      }
+
+      if (!name) continue;
       if (visited) visitedCount++;
 
       const marker = L.marker([lat, lng], { icon: makeRestaurantIcon(visited) });
 
       let popupHtml = `<div class="popup-name">${name}</div>`;
       if (category) popupHtml += `<div class="popup-category">${category}</div>`;
-
       if (visited) {
         if (visitDate && visitDate !== 0) {
           const d = new Date(visitDate);
@@ -582,40 +616,54 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.restaurants.push({ marker, visited });
-    });
+      allMarkers.restaurants.push({ marker, visited, category });
+
+      // Update UI as each marker is geocoded
+      stats.restaurants = { visited: visitedCount, total };
+      if (activeLayer === 'restaurants') { applyFilter(); updateCounter('restaurants'); }
+    }
 
     stats.restaurants = { visited: visitedCount, total };
-    if (activeLayer === 'restaurants') applyFilter();
-    if (activeLayer === 'restaurants') updateCounter('restaurants');
+    if (activeLayer === 'restaurants') { applyFilter(); updateCounter('restaurants'); }
   }
 
   // ── Render other ─────────────────────────────────────────────────────────
-  function renderOther() {
+  async function renderOther() {
     if (!otherData) return;
 
     let visitedCount = 0;
     const total = otherData.length;
-    const usedCoords = {}; // track duplicate coordinates
+    const usedCoords = {};
+    stats.other = { visited: 0, total };
+    if (activeLayer === 'other') updateCounter('other');
 
-    otherData.forEach(row => {
+    for (const row of otherData) {
       const name      = String(row['Experience'] || '').trim();
       const category  = String(row['Category']   || '').trim();
       const visited   = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
       const notes     = String(row['Notes']      || '').trim();
       const visitDate = row['Visit Date'];
-      let lat         = parseFloat(row['lat']);
-      let lng         = parseFloat(row['lng']);
+      const address   = String(row['Address']    || '').trim();
 
-      if (!name || isNaN(lat) || isNaN(lng)) return;
+      let lat = parseFloat(row['lat']);
+      let lng = parseFloat(row['lng']);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        if (!address) continue;
+        const coords = await geocodeAddress(address);
+        if (!coords) continue;
+        [lat, lng] = coords;
+      }
+
+      if (!name) continue;
       if (visited) visitedCount++;
 
-      // Spread duplicate coordinates in a small circle
+      // Spread duplicate coordinates
       const key = lat.toFixed(4) + ',' + lng.toFixed(4);
       const count = usedCoords[key] || 0;
       usedCoords[key] = count + 1;
       if (count > 0) {
-        const angle  = (count * 137.5) * (Math.PI / 180); // golden angle keeps pins evenly spread
+        const angle = (count * 137.5) * (Math.PI / 180);
         const radius = 0.0003;
         lat += radius * Math.cos(angle);
         lng += radius * Math.sin(angle);
@@ -625,7 +673,6 @@
 
       let popupHtml = `<div class="popup-name">${name}</div>`;
       if (category) popupHtml += `<div class="popup-category">${category}</div>`;
-
       if (visited) {
         if (visitDate && visitDate !== 0) {
           const d = new Date(visitDate);
@@ -642,8 +689,12 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.other.push({ marker, visited });
-    });
+      allMarkers.other.push({ marker, visited, category });
+
+      // Update UI as each marker is geocoded
+      stats.other = { visited: visitedCount, total };
+      if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
+    }
 
     stats.other = { visited: visitedCount, total };
     if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
