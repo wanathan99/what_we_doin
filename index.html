@@ -176,9 +176,15 @@
 
     .legend {
       display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.4rem;
+    }
+
+    .legend-items {
+      display: flex;
       gap: 1.25rem;
       align-items: center;
-      flex-wrap: wrap;
     }
 
     .legend-item {
@@ -327,10 +333,12 @@
   </div>
 
   <div class="legend">
-    <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:0.1rem;">click to filter</div>
-    <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
-    <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
-    <div class="category-wrap" id="category-wrap" style="display:none;width:100%;margin-top:0.3rem;">
+    <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;">click to filter</div>
+    <div class="legend-items">
+      <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
+      <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
+    </div>
+    <div class="category-wrap" id="category-wrap" style="display:none;">
       <label>Category</label>
       <select id="category-select" onchange="filterByCategory(this.value)">
         <option value="">All</option>
