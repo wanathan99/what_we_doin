@@ -769,6 +769,7 @@
 
     let visitedCount = 0;
     const total = chicagoHotelData.length;
+    const usedCoords = {};
     stats.chicagoHotels = { visited: 0, total };
     if (activeLayer === 'chicagoHotels') updateCounter('chicagoHotels');
 
@@ -792,6 +793,17 @@
 
       if (!name) continue;
       if (visited) visitedCount++;
+
+      // Spread duplicate coordinates
+      const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+      const count = usedCoords[key] || 0;
+      usedCoords[key] = count + 1;
+      if (count > 0) {
+        const angle = (count * 137.5) * (Math.PI / 180);
+        const radius = 0.0003;
+        lat += radius * Math.cos(angle);
+        lng += radius * Math.sin(angle);
+      }
 
       const marker = L.marker([lat, lng], { icon: makeHotelIcon(visited) });
 
