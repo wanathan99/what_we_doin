@@ -392,7 +392,7 @@
     },
     chicago: {
       center: [41.883, -87.632], zoom: 14,
-      defaultLayer: 'chicagoHotels',
+      defaultLayer: 'chicagoRestaurants',
       layers: [
         { id: 'chicagoHotels',      label: '🏨 Hotels' },
         { id: 'chicagoRestaurants', label: '🍽️ Restaurants' }
@@ -438,9 +438,7 @@
         border:2.5px solid ${visited ? '#c9a000' : '#888'};
         box-shadow:0 0 ${visited ? '8px rgba(245,197,24,0.6)' : '4px rgba(0,0,0,0.4)'};
         cursor:pointer;
-        display:flex;align-items:center;justify-content:center;
-        font-size:9px;line-height:1;
-      ">🏨</div>`,
+      "></div>`,
       iconSize: [15,15], iconAnchor: [7,7], popupAnchor: [0,-10]
     });
   }
