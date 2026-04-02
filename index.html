@@ -264,8 +264,9 @@
     <div class="toggle-group">
       <div class="toggle-btns">
         <button class="city-btn active" id="btn-nyc" onclick="switchCity('nyc')">NYC</button>
+        <button class="city-btn" id="btn-chicago" onclick="switchCity('chicago')">Chicago</button>
       </div>
-      <div class="toggle-btns">
+      <div class="toggle-btns" id="layer-btns">
         <button class="toggle-btn active" id="btn-theaters" onclick="switchLayer('theaters')">🎭 Broadway</button>
         <button class="toggle-btn" id="btn-restaurants" onclick="switchLayer('restaurants')">🍽️ Restaurants</button>
         <button class="toggle-btn" id="btn-other" onclick="switchLayer('other')">🥀 Other</button>
@@ -353,24 +354,46 @@
   }).addTo(map);
 
   // ── Layer groups ──────────────────────────────────────────────────────────
-  const theaterLayer    = L.layerGroup().addTo(map);
-  const restaurantLayer = L.layerGroup();
-  const otherLayer      = L.layerGroup();
+  const theaterLayer      = L.layerGroup().addTo(map);
+  const restaurantLayer   = L.layerGroup();
+  const otherLayer        = L.layerGroup();
+  const chicagoHotelLayer = L.layerGroup();
 
   const stats = {
-    theaters:    { visited: 0, total: 0 },
-    restaurants: { visited: 0, total: 0 },
-    other:       { visited: 0, total: 0 }
+    theaters:      { visited: 0, total: 0 },
+    restaurants:   { visited: 0, total: 0 },
+    other:         { visited: 0, total: 0 },
+    chicagoHotels: { visited: 0, total: 0 }
   };
 
+  let activeCity   = 'nyc';
   let activeLayer  = 'theaters';
-  let activeFilter = null; // 'visited', 'not-visited', or null (show all)
+  let activeFilter = null;
 
-  // Store all markers with visited state for filtering
   const allMarkers = {
-    theaters:    [], // { marker, visited }
-    restaurants: [],
-    other:       []
+    theaters:      [],
+    restaurants:   [],
+    other:         [],
+    chicagoHotels: []
+  };
+
+  const cityConfig = {
+    nyc: {
+      center: [40.762, -73.986], zoom: 15,
+      defaultLayer: 'theaters',
+      layers: [
+        { id: 'theaters',    label: '🎭 Broadway' },
+        { id: 'restaurants', label: '🍽️ Restaurants' },
+        { id: 'other',       label: '🥀 Other' }
+      ]
+    },
+    chicago: {
+      center: [41.883, -87.632], zoom: 14,
+      defaultLayer: 'chicagoHotels',
+      layers: [
+        { id: 'chicagoHotels', label: '🏨 Hotels' }
+      ]
+    }
   };
 
   // ── Icons ─────────────────────────────────────────────────────────────────
@@ -402,6 +425,22 @@
     });
   }
 
+  function makeHotelIcon(visited) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:15px;height:15px;border-radius:3px;
+        background:${visited ? '#f5c518' : '#555'};
+        border:2.5px solid ${visited ? '#c9a000' : '#888'};
+        box-shadow:0 0 ${visited ? '8px rgba(245,197,24,0.6)' : '4px rgba(0,0,0,0.4)'};
+        cursor:pointer;
+        display:flex;align-items:center;justify-content:center;
+        font-size:9px;line-height:1;
+      ">🏨</div>`,
+      iconSize: [15,15], iconAnchor: [7,7], popupAnchor: [0,-10]
+    });
+  }
+
   function makeOtherIcon(visited) {
     return L.divIcon({
       className: '',
@@ -428,29 +467,49 @@
 
   // ── City toggle ───────────────────────────────────────────────────────────
   function switchCity(city) {
+    activeCity = city;
     document.querySelectorAll('.city-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('btn-' + city).classList.add('active');
-    // future: swap in city-specific layers here
+
+    const cfg = cityConfig[city];
+    map.setView(cfg.center, cfg.zoom);
+
+    // Rebuild layer buttons for this city
+    const layerBtns = document.getElementById('layer-btns');
+    layerBtns.innerHTML = '';
+    cfg.layers.forEach((l, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'toggle-btn' + (i === 0 ? ' active' : '');
+      btn.id = 'btn-' + l.id;
+      btn.textContent = l.label;
+      btn.onclick = () => switchLayer(l.id);
+      layerBtns.appendChild(btn);
+    });
+
+    switchLayer(cfg.defaultLayer);
   }
 
   // ── Layer toggle ──────────────────────────────────────────────────────────
+  const allLayers = {
+    theaters:      () => theaterLayer,
+    restaurants:   () => restaurantLayer,
+    other:         () => otherLayer,
+    chicagoHotels: () => chicagoHotelLayer
+  };
+
   function switchLayer(which) {
     activeLayer  = which;
     activeFilter = null;
     document.getElementById('filter-visited').classList.remove('active-filter');
     document.getElementById('filter-not-visited').classList.remove('active-filter');
 
-    // Hide all layers, then show the selected one
-    map.removeLayer(theaterLayer);
-    map.removeLayer(restaurantLayer);
-    map.removeLayer(otherLayer);
-    if (which === 'theaters')    map.addLayer(theaterLayer);
-    if (which === 'restaurants') map.addLayer(restaurantLayer);
-    if (which === 'other')       map.addLayer(otherLayer);
+    // Hide all layers, show selected
+    Object.values(allLayers).forEach(fn => map.removeLayer(fn()));
+    map.addLayer(allLayers[which]());
 
     // Update toggle buttons
-    ['theaters', 'restaurants', 'other'].forEach(l => {
-      document.getElementById('btn-' + l).classList.toggle('active', l === which);
+    document.querySelectorAll('#layer-btns .toggle-btn').forEach(b => {
+      b.classList.toggle('active', b.id === 'btn-' + which);
     });
 
     applyFilter();
@@ -468,9 +527,12 @@
   }
 
   function applyFilter() {
-    const layerMap = { theaters: theaterLayer, restaurants: restaurantLayer, other: otherLayer };
-    const layer    = layerMap[activeLayer];
-    const markers  = allMarkers[activeLayer];
+    const layerMap = {
+      theaters: theaterLayer, restaurants: restaurantLayer,
+      other: otherLayer, chicagoHotels: chicagoHotelLayer
+    };
+    const layer   = layerMap[activeLayer];
+    const markers = allMarkers[activeLayer];
 
     layer.clearLayers();
     markers.forEach(({ marker, visited }) => {
@@ -483,12 +545,13 @@
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4EACzoROniboBkmrK2A7YA2_KiWTXrZAJWLPn_qLEajf1kA3dMrCDGP1U2EVTtoUdjA/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwGw8v44ymb-terVbYpL2r8hdfruihLTmLSF5F4T5yvEjVYVfYUudpkXmMRGSBViULhvw/exec';
 
-  let sheetData      = null;
-  let currentShows   = null;
-  let restaurantData = null;
-  let otherData      = null;
+  let sheetData         = null;
+  let currentShows      = null;
+  let restaurantData    = null;
+  let otherData         = null;
+  let chicagoHotelData  = null;
 
   // ── Render theaters ───────────────────────────────────────────────────────
   function tryRenderTheaters() {
@@ -700,6 +763,66 @@
     if (activeLayer === 'other') { applyFilter(); updateCounter('other'); }
   }
 
+  // ── Render Chicago Hotels ─────────────────────────────────────────────────
+  async function renderChicagoHotels() {
+    if (!chicagoHotelData) return;
+
+    let visitedCount = 0;
+    const total = chicagoHotelData.length;
+    stats.chicagoHotels = { visited: 0, total };
+    if (activeLayer === 'chicagoHotels') updateCounter('chicagoHotels');
+
+    for (const row of chicagoHotelData) {
+      const name      = String(row['Hotel']        || '').trim();
+      const brand     = String(row['Brand Family'] || '').trim();
+      const notes     = String(row['Notes']        || '').trim();
+      const address   = String(row['Address']      || '').trim();
+      const visitDate = row['Visit Date'];
+      const visited   = !!(visitDate && visitDate !== '' && visitDate !== 0);
+
+      let lat = parseFloat(row['lat']);
+      let lng = parseFloat(row['lng']);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        if (!address) continue;
+        const coords = await geocodeAddress(address + ', Chicago, IL');
+        if (!coords) continue;
+        [lat, lng] = coords;
+      }
+
+      if (!name) continue;
+      if (visited) visitedCount++;
+
+      const marker = L.marker([lat, lng], { icon: makeHotelIcon(visited) });
+
+      let popupHtml = `<div class="popup-name">${name}</div>`;
+      if (brand) popupHtml += `<div class="popup-category">${brand}</div>`;
+      if (visited) {
+        if (visitDate) {
+          const d = new Date(visitDate);
+          const fmt = !isNaN(d)
+            ? d.toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'2-digit', timeZone:'UTC' })
+            : '';
+          if (fmt) popupHtml += `<div class="popup-date">🗓 ${fmt}</div>`;
+        }
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+        if (!notes) popupHtml += `<div class="popup-show" style="color:#4ade80">✓ Stayed here</div>`;
+      } else {
+        popupHtml += `<div class="popup-not-visited">Not yet stayed</div>`;
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+      }
+
+      marker.bindPopup(popupHtml);
+      allMarkers.chicagoHotels.push({ marker, visited, category: brand });
+
+      stats.chicagoHotels = { visited: visitedCount, total };
+      if (activeLayer === 'chicagoHotels') { applyFilter(); updateCounter('chicagoHotels'); }
+    }
+
+    stats.chicagoHotels = { visited: visitedCount, total };
+    if (activeLayer === 'chicagoHotels') { applyFilter(); updateCounter('chicagoHotels'); }
+  }
+
   // ── Callbacks ─────────────────────────────────────────────────────────────
   window.handleTheaterData = function(data) {
     sheetData = data;
@@ -719,6 +842,11 @@
   window.handleOtherData = function(data) {
     otherData = data;
     renderOther();
+  };
+
+  window.handleChicagoHotelData = function(data) {
+    chicagoHotelData = data;
+    renderChicagoHotels();
   };
 
   function loadJSONP(src, onerrorCallback) {
@@ -743,6 +871,10 @@
   loadJSONP(
     APPS_SCRIPT_URL + '?action=other&callback=handleOtherData',
     () => { otherData = []; renderOther(); }
+  );
+  loadJSONP(
+    APPS_SCRIPT_URL + '?action=chicagoHotels&callback=handleChicagoHotelData',
+    () => { chicagoHotelData = []; renderChicagoHotels(); }
   );
 </script>
 
