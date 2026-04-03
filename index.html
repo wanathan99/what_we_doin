@@ -457,6 +457,16 @@
     });
   }
 
+  // ── Star rating ───────────────────────────────────────────────────────────
+  function starsHtml(rating) {
+    let html = '<div style="font-size:1.1rem;letter-spacing:0.05em;margin-bottom:0.3rem;">';
+    for (let i = 1; i <= 5; i++) {
+      html += `<span style="color:${i <= rating ? '#f5c518' : '#333'};">★</span>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
   // ── Counter ───────────────────────────────────────────────────────────────
   function updateCounter(layer) {
     const s = stats[layer];
@@ -857,6 +867,7 @@
       const address   = String(row['Address']      || '').trim();
       const visitDate = row['Visit Date'];
       const visited   = !!(visitDate && visitDate !== '' && visitDate !== 0);
+      const rating    = parseInt(row['Rating']) || 0;
 
       let lat = parseFloat(row['lat']);
       let lng = parseFloat(row['lng']);
@@ -886,6 +897,7 @@
 
       let popupHtml = `<div class="popup-name">${name}</div>`;
       if (brand) popupHtml += `<div class="popup-category">${brand}</div>`;
+      if (rating) popupHtml += starsHtml(rating);
       if (visited) {
         if (visitDate) {
           const d = new Date(visitDate);
