@@ -306,9 +306,9 @@
     <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:0.1rem;">click to filter</div>
     <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
     <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
-    <div id="rating-filter" style="display:none;width:100%;margin-top:0.25rem;">
-      <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.2rem;">min rating</div>
-      <div id="rating-stars">
+    <div id="rating-filter" style="display:none;align-items:center;gap:0.35rem;border-left:1px solid #333;padding-left:0.6rem;margin-left:0.1rem;">
+      <span style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">min</span>
+      <div id="rating-stars" style="display:flex;gap:0.05rem;">
         <span class="rating-star" data-star="1" onclick="toggleRatingFilter(1)">★</span>
         <span class="rating-star" data-star="2" onclick="toggleRatingFilter(2)">★</span>
         <span class="rating-star" data-star="3" onclick="toggleRatingFilter(3)">★</span>
@@ -541,7 +541,7 @@
 
     // Show/hide rating filter
     const ratingFilter = document.getElementById('rating-filter');
-    ratingFilter.style.display = which === 'chicagoHotels' ? 'block' : 'none';
+    ratingFilter.style.display = which === 'chicagoHotels' ? 'flex' : 'none';
     document.querySelectorAll('.rating-star').forEach(s => s.classList.remove('active'));
 
     // Hide all layers, show selected
