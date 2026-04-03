@@ -254,6 +254,17 @@
     }
 
     .leaflet-popup-close-button { color: #aaa !important; }
+
+    .rating-star {
+      font-size: 1.2rem;
+      color: #444;
+      cursor: pointer;
+      transition: color 0.15s;
+      letter-spacing: 0.05em;
+    }
+
+    .rating-star.active { color: #f5c518; }
+    .rating-star:hover  { color: #f5c518; }
   </style>
 </head>
 <body>
@@ -295,6 +306,16 @@
     <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:0.1rem;">click to filter</div>
     <div class="legend-item" id="filter-visited" onclick="toggleFilter('visited')"><span class="legend-dot visited"></span> Visited</div>
     <div class="legend-item" id="filter-not-visited" onclick="toggleFilter('not-visited')"><span class="legend-dot not-visited"></span> Not Yet Visited</div>
+    <div id="rating-filter" style="display:none;width:100%;margin-top:0.25rem;">
+      <div style="font-size:0.68rem;color:#666;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.2rem;">min rating</div>
+      <div id="rating-stars">
+        <span class="rating-star" data-star="1" onclick="toggleRatingFilter(1)">★</span>
+        <span class="rating-star" data-star="2" onclick="toggleRatingFilter(2)">★</span>
+        <span class="rating-star" data-star="3" onclick="toggleRatingFilter(3)">★</span>
+        <span class="rating-star" data-star="4" onclick="toggleRatingFilter(4)">★</span>
+        <span class="rating-star" data-star="5" onclick="toggleRatingFilter(5)">★</span>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -371,6 +392,7 @@
   let activeCity   = 'nyc';
   let activeLayer  = 'theaters';
   let activeFilter = null;
+  let activeRating = 0; // 0 = no filter, 1-5 = minimum rating
 
   const allMarkers = {
     theaters:           [],
@@ -513,8 +535,14 @@
   function switchLayer(which) {
     activeLayer  = which;
     activeFilter = null;
+    activeRating = 0;
     document.getElementById('filter-visited').classList.remove('active-filter');
     document.getElementById('filter-not-visited').classList.remove('active-filter');
+
+    // Show/hide rating filter
+    const ratingFilter = document.getElementById('rating-filter');
+    ratingFilter.style.display = which === 'chicagoHotels' ? 'block' : 'none';
+    document.querySelectorAll('.rating-star').forEach(s => s.classList.remove('active'));
 
     // Hide all layers, show selected
     Object.values(allLayers).forEach(fn => map.removeLayer(fn()));
@@ -539,6 +567,17 @@
     applyFilter();
   }
 
+  function toggleRatingFilter(star) {
+    activeRating = activeRating === star ? 0 : star;
+
+    document.querySelectorAll('.rating-star').forEach(s => {
+      const n = parseInt(s.dataset.star);
+      s.classList.toggle('active', activeRating > 0 && n <= activeRating);
+    });
+
+    applyFilter();
+  }
+
   function applyFilter() {
     const layerMap = {
       theaters: theaterLayer, restaurants: restaurantLayer,
@@ -549,12 +588,12 @@
     const markers = allMarkers[activeLayer];
 
     layer.clearLayers();
-    markers.forEach(({ marker, visited }) => {
-      if (activeFilter === null ||
+    markers.forEach(({ marker, visited, rating }) => {
+      const passVisited = activeFilter === null ||
          (activeFilter === 'visited'     &&  visited) ||
-         (activeFilter === 'not-visited' && !visited)) {
-        layer.addLayer(marker);
-      }
+         (activeFilter === 'not-visited' && !visited);
+      const passRating = activeLayer !== 'chicagoHotels' || activeRating === 0 || (rating || 0) >= activeRating;
+      if (passVisited && passRating) layer.addLayer(marker);
     });
   }
 
@@ -914,7 +953,7 @@
       }
 
       marker.bindPopup(popupHtml);
-      allMarkers.chicagoHotels.push({ marker, visited, category: brand });
+      allMarkers.chicagoHotels.push({ marker, visited, category: brand, rating });
 
       stats.chicagoHotels = { visited: visitedCount, total };
       if (activeLayer === 'chicagoHotels') { applyFilter(); updateCounter('chicagoHotels'); }
