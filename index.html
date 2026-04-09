@@ -380,13 +380,15 @@
   const otherLayer        = L.layerGroup();
   const chicagoHotelLayer      = L.layerGroup();
   const chicagoRestaurantLayer = L.layerGroup();
+  const chicagoOtherLayer      = L.layerGroup();
 
   const stats = {
     theaters:            { visited: 0, total: 0 },
     restaurants:         { visited: 0, total: 0 },
     other:               { visited: 0, total: 0 },
     chicagoHotels:       { visited: 0, total: 0 },
-    chicagoRestaurants:  { visited: 0, total: 0 }
+    chicagoRestaurants:  { visited: 0, total: 0 },
+    chicagoOther:        { visited: 0, total: 0 }
   };
 
   let activeCity   = 'nyc';
@@ -399,7 +401,8 @@
     restaurants:        [],
     other:              [],
     chicagoHotels:      [],
-    chicagoRestaurants: []
+    chicagoRestaurants: [],
+    chicagoOther:       []
   };
 
   const cityConfig = {
@@ -417,7 +420,8 @@
       defaultLayer: 'chicagoRestaurants',
       layers: [
         { id: 'chicagoRestaurants', label: '🍽️ Restaurants' },
-        { id: 'chicagoHotels',      label: '🏨 Hotels' }
+        { id: 'chicagoHotels',      label: '🏨 Hotels' },
+        { id: 'chicagoOther',       label: '🌬️ Other' }
       ]
     }
   };
@@ -529,7 +533,8 @@
     restaurants:        () => restaurantLayer,
     other:              () => otherLayer,
     chicagoHotels:      () => chicagoHotelLayer,
-    chicagoRestaurants: () => chicagoRestaurantLayer
+    chicagoRestaurants: () => chicagoRestaurantLayer,
+    chicagoOther:       () => chicagoOtherLayer
   };
 
   function switchLayer(which) {
@@ -582,7 +587,8 @@
     const layerMap = {
       theaters: theaterLayer, restaurants: restaurantLayer,
       other: otherLayer, chicagoHotels: chicagoHotelLayer,
-      chicagoRestaurants: chicagoRestaurantLayer
+      chicagoRestaurants: chicagoRestaurantLayer,
+      chicagoOther: chicagoOtherLayer
     };
     const layer   = layerMap[activeLayer];
     const markers = allMarkers[activeLayer];
@@ -598,7 +604,7 @@
   }
 
   // ── Load data via JSONP ───────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxv7vNHAJYKEmyFyzDDCaDFeMafI8bpKhYL4-8DPVHtizco1iQmFxX7ooQHGHBO-IO8/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxwguDVXZwaBbQbFksNwDHplNE5hcwWUhKwBsSj9CdgOHagQzI3JCFhALQzP1gyY-m3vg/exec';
 
   let sheetData         = null;
   let currentShows      = null;
@@ -606,6 +612,7 @@
   let otherData         = null;
   let chicagoHotelData       = null;
   let chicagoRestaurantData  = null;
+  let chicagoOtherData       = null;
 
   // ── Render theaters ───────────────────────────────────────────────────────
   function tryRenderTheaters() {
@@ -963,6 +970,78 @@
     if (activeLayer === 'chicagoHotels') { applyFilter(); updateCounter('chicagoHotels'); }
   }
 
+  // ── Render Chicago Other ──────────────────────────────────────────────────
+  async function renderChicagoOther() {
+    if (!chicagoOtherData) return;
+
+    let visitedCount = 0;
+    const total = chicagoOtherData.length;
+    const usedCoords = {};
+    stats.chicagoOther = { visited: 0, total };
+    if (activeLayer === 'chicagoOther') updateCounter('chicagoOther');
+
+    for (const row of chicagoOtherData) {
+      const name      = String(row['Experience'] || '').trim();
+      const category  = String(row['Category']   || '').trim();
+      const visited   = row['Visited'] === true || String(row['Visited']).toUpperCase() === 'TRUE';
+      const notes     = String(row['Notes']      || '').trim();
+      const visitDate = row['Visit Date'];
+      const address   = String(row['Address']    || '').trim();
+
+      let lat = parseFloat(row['lat']);
+      let lng = parseFloat(row['lng']);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        if (!address) continue;
+        const coords = await geocodeAddress(address);
+        if (!coords) continue;
+        [lat, lng] = coords;
+      }
+
+      if (!name) continue;
+      if (visited) visitedCount++;
+
+      // Spread duplicate coordinates
+      const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+      const count = usedCoords[key] || 0;
+      usedCoords[key] = count + 1;
+      if (count > 0) {
+        const angle = (count * 137.5) * (Math.PI / 180);
+        const radius = 0.0003;
+        lat += radius * Math.cos(angle);
+        lng += radius * Math.sin(angle);
+      }
+
+      const marker = L.marker([lat, lng], { icon: makeOtherIcon(visited) });
+
+      let popupHtml = `<div class="popup-name">${name}</div>`;
+      if (category) popupHtml += `<div class="popup-category">${category}</div>`;
+      if (visited) {
+        if (visitDate && visitDate !== 0) {
+          const d = new Date(visitDate);
+          const fmt = !isNaN(d)
+            ? d.toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'2-digit', timeZone:'UTC' })
+            : '';
+          if (fmt) popupHtml += `<div class="popup-date">🗓 ${fmt}</div>`;
+        }
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+        if (!notes) popupHtml += `<div class="popup-show" style="color:#f5c518">✓ Visited</div>`;
+      } else {
+        popupHtml += `<div class="popup-not-visited">Not yet visited</div>`;
+        if (notes) popupHtml += `<div class="popup-notes">💬 ${notes}</div>`;
+      }
+
+      marker.bindPopup(popupHtml);
+      allMarkers.chicagoOther.push({ marker, visited, category });
+
+      stats.chicagoOther = { visited: visitedCount, total };
+      if (activeLayer === 'chicagoOther') { applyFilter(); updateCounter('chicagoOther'); }
+    }
+
+    stats.chicagoOther = { visited: visitedCount, total };
+    if (activeLayer === 'chicagoOther') { applyFilter(); updateCounter('chicagoOther'); }
+  }
+
   // ── Callbacks ─────────────────────────────────────────────────────────────
   window.handleTheaterData = function(data) {
     sheetData = data;
@@ -992,6 +1071,11 @@
   window.handleChicagoRestaurantData = function(data) {
     chicagoRestaurantData = data;
     renderChicagoRestaurants();
+  };
+
+  window.handleChicagoOtherData = function(data) {
+    chicagoOtherData = data;
+    renderChicagoOther();
   };
 
   function loadJSONP(src, onerrorCallback) {
@@ -1024,6 +1108,10 @@
   loadJSONP(
     APPS_SCRIPT_URL + '?action=chicagoRestaurants&callback=handleChicagoRestaurantData',
     () => { chicagoRestaurantData = []; renderChicagoRestaurants(); }
+  );
+  loadJSONP(
+    APPS_SCRIPT_URL + '?action=chicagoOther&callback=handleChicagoOtherData',
+    () => { chicagoOtherData = []; renderChicagoOther(); }
   );
 </script>
 
